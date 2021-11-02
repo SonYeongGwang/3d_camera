@@ -8,6 +8,7 @@ aruco_dict = aruco.Dictionary_get(aruco.DICT_6X6_250)
 marker_size = 0.068 # actual marker size in meters
 
 #Mads
+#Son added
 
 while True:
     rgb, depth = cam.stream()
