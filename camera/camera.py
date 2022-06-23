@@ -115,3 +115,4 @@ if __name__ == '__main__':
         vis.update_geometry(pcd)
         vis.poll_events()
         vis.update_renderer()
+	print("testing multiple remote connection..")
