@@ -117,3 +117,4 @@ if __name__ == '__main__':
         vis.update_renderer()
 	print("testing multiple remote connection..")
 	print("testing multiple remote connection..2")
+	print("testing multiple remote connection..edit in other local")
