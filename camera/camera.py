@@ -3,6 +3,8 @@ import cv2
 import numpy as np
 import open3d as o3d
 
+from cv2 import aruco
+
 class Camera:
     def __init__(self):
         self.context = rs.context()
@@ -58,6 +60,31 @@ class Camera:
 
         return self.color_image, self.depth_image
 
+    def detectCharuco(self):
+        if self.saw_charuco != True:
+            self.board = aruco.CharucoBoard_create(7, 5, 0.035, 0.025, self.aruco_dict_ch)
+            self.params = aruco.DetectorParameters_create()
+            self.saw_charuco = True
+
+        gray_img = cv2.cvtColor(self.color_image, cv2.COLOR_BGR2GRAY)
+        corners, ids, rejected_points  =  aruco.detectMarkers(gray_img, self.aruco_dict_ch, parameters=self.params)
+        if np.shape(corners)[0] <= 0:
+            print("INFO: No Marker Detected")
+        
+        else:
+            print("INFO: Marker Detected:",len(corners))
+            aruco.refineDetectedMarkers(gray_img, self.board, corners, ids, rejected_points)
+            _, charuco_corners, charuco_ids = aruco.interpolateCornersCharuco(corners, ids, gray_img, self.board, self.camera_mat, self.dist_coeffs)
+            if len(corners) > 10:
+                _, rvec, tvec = aruco.estimatePoseCharucoBoard(charuco_corners, charuco_ids, self.board, self.camera_mat, self.dist_coeffs)
+                R, _ = cv2.Rodrigues(rvec)
+                tvec = np.reshape(tvec, (3, 1))
+                self.cam2marker = np.concatenate((R, tvec), axis = 1)
+                self.cam2marker = np.concatenate((self.cam2marker, np.array([[0, 0, 0, 1]])), axis = 0)
+                aruco.drawAxis(self.color_image, self.camera_mat, self.dist_coeffs, rvec, tvec, 0.07)
+                aruco.drawDetectedCornersCharuco(self.color_image, charuco_corners, charuco_ids, (255, 0, 0))
+
+
     def generate_pcd(self, depth):
         self.pcd = o3d.geometry.PointCloud()
         ## return raw point cloud xyz from intensity-aligned depth map
@@ -92,29 +119,13 @@ class Camera:
 if __name__ == '__main__':
     cam = Camera()
 
-    pcd = o3d.geometry.PointCloud()
-    vis = o3d.visualization.Visualizer()
-    vis.create_window("Point Clouds", width=848, height=480)
-    added = True
-
     while 1:
         rgb_img, depth_img = cam.stream(colored_depth=False)
 
-        xyz = cam.generate_pcd(depth_img)
-        pcd.points = o3d.utility.Vector3dVector(xyz)
+        cam.detectCharuco()
+        print(cam.cam2marker)
 
         ## visualize rgb and depth image
         cv2.imshow("rgb", rgb_img)
         cv2.imshow("depth", depth_img)
         cv2.waitKey(1)
-
-        ## visualize point cloud caculated from the depth image
-        if added == True:
-            vis.add_geometry(pcd)
-            added = False
-        vis.update_geometry(pcd)
-        vis.poll_events()
-        vis.update_renderer()
-	print("testing multiple remote connection..")
-	print("testing multiple remote connection..2")
-	print("testing multiple remote connection..edit in other local")
