@@ -1,61 +1,50 @@
 import sys
-sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
+# sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
 import cv2
 import numpy as np
 import open3d as o3d
+from scipy.spatial.transform import Rotation as R
 
-# pose1
-b2g_pose1 = np.asarray([[ 0.98433682, -0.17312578,  0.03329385,  0.30252],
-            [ 0.16712995,  0.8562494,  -0.48877862, -0.70223   ],
-            [ 0.05611234,  0.48668719,  0.87177232,  0.47824   ],
-            [ 0.    ,      0.   ,      0.    ,      1.        ]])
+c2m_pose = np.asarray([[ 0.99086343, -0.08311511, -0.10621463, -0.1016177 ],
+ [-0.06862307, -0.9886728,   0.13348023,  0.08618921],
+ [-0.11610574, -0.1249719,  -0.98534333,  0.31929494],
+ [ 0.        ,  0.       ,   0.        ,  1.        ]]
+)
 
-c2m_pose1 = np.asarray([[ 0.23390079,  0.85964598 , 0.45420173 ,-0.22724335],
-            [ 0.97150724, -0.22503364, -0.07438776, -0.08731337],
-            [ 0.03826353 , 0.45865963, -0.88778784,  0.49130207],
-            [ 0.       ,   0.    ,      0.      ,    1.        ]])
-
-#pose2
-b2g_pose2 = np.asarray([[ 9.60926383e-01, -1.88095651e-01 ,-2.03077604e-01 , 2.94270000e-01],
-            [ 1.83995806e-01  ,9.82150700e-01, -3.90582241e-02 ,-7.01480000e-01],
-            [ 2.06799493e-01 , 1.66650536e-04 , 9.78383331e-01 , 5.87510000e-01],
-            [ 0.00000000e+00 , 0.00000000e+00 , 0.00000000e+00  ,1.00000000e+00]])
-
-c2m_pose2 = np.asarray([[ 0.24148553 , 0.96887413, 0.05447624 ,-0.24011779],
-            [ 0.93762508, -0.24742795,  0.24421018, -0.07021107],
-            [ 0.25008787 ,-0.00789494 ,-0.96819096 , 0.395606  ],
-            [ 0.       ,   0.  ,       0.    ,     1.      ,  ]])
-
-#pose3
-b2g_pose3 = np.asarray([[ 0.89338572, -0.14105918 , 0.42657269  ,0.2186    ],
- [ 0.37635776 , 0.75351418 ,-0.53904658 ,-0.73591  , ],
- [-0.2453911  , 0.64212046 , 0.72626753 , 0.49209   ],
- [ 0.       ,   0.     ,     0. ,         1.  ,      ]])
-c2m_pose3 = np.asarray([[ 0.31986957 , 0.80236196,  0.50388367, -0.19527102],
- [ 0.89191362 ,-0.0755793 , -0.44584511, -0.00895836],
- [-0.31964598 , 0.59203299, -0.73981307,  0.5082621 ],
- [ 0.   ,       0.      ,    0.,          1.        ]])
-
-
-
-b2e_pose = np.asarray([[-0.35152884,  0.93617705,  0.,          0.0226    ],
- [-0.93617705, -0.35152884,  0.       ,  -0.77496   ],
- [ 0.        ,  0.        ,  1.       ,   0.70203   ],
- [ 0.        ,  0.        ,  0.       ,   1.        ]])
-
-c2m_pose = np.asarray([[ 0.93926384,  0.3405783,   0.04230661, -0.20959253],
- [ 0.33821253, -0.93949638,  0.0543952 ,  0.03389935],
- [ 0.05827273, -0.03678282, -0.99762283,  0.30283646],
- [ 0.        ,  0.        ,  0.        ,  1.        ]])
-
-m2e_pose = np.asarray([[1,     0,     0,     0.242/2], 
+m2mc_pose = np.asarray([[1,     0,     0,     0.242/2], 
                        [0,     1,     0,     0.172/2], 
                        [0,     0,     1,     -0.003 ], 
                        [0,     0,     0,     1     ]])
 
-c2b = np.dot(np.dot(c2m_pose, m2e_pose), np.linalg.inv(b2e_pose))
+mc2e_pose = np.asarray([[0, 0, 1, 0],
+                        [0, 1, 0 , 0],
+                        [-1, 0, 0, 0],
+                        [0, 0, 0, 1]])
+# mc2e_pose = np.eye(4,4)
+
+b2e_pose = np.asarray([[-0.06542853, -0.9955839,  -0.06731876,  0.5778    ],
+ [ 0.11618756, -0.07460538,  0.99042137, -0.05785   ],
+ [-0.99106991,  0.05698021,  0.12055578,  0.62737   ],
+ [ 0.        ,  0.        ,  0.        ,  1.        ]]
+)
+
+b2e_pose_R = b2e_pose[:3, :3]
+b2e_pose_t = b2e_pose[:3, 3]
+
+b2e_pose_inv = np.zeros_like(b2e_pose)
+b2e_pose_inv[:3, :3] = b2e_pose_R.T
+b2e_pose_inv[:3, 3] = -b2e_pose_R.T @ b2e_pose_t
+b2e_pose_inv[-1,-1] = 1
+
+# c2e = np.dot(np.dot(c2m_pose, m2mc_pose), mc2e_pose)
+# print(c2e)
+
+print("A\n", b2e_pose_inv)
+print("B\n",np.linalg.inv(b2e_pose))
+
+c2b = np.dot(np.dot(np.dot(c2m_pose, m2mc_pose), mc2e_pose), np.linalg.inv(b2e_pose))
 b2c = np.linalg.inv(c2b)
-print(b2c)
+print("b2c^^v\n",b2c)
 
 # c2b = np.dot(c2g_pose, np.linalg.inv(b2g_pose))
 # b2c = np.linalg.inv(c2b)
@@ -73,61 +62,71 @@ print(b2c)
 # print(b2c)
 # print()
 
-class Cam2gripper:
-    def calibrate_eye_hand(R_gripper2base, t_gripper2base, R_target2cam, t_target2cam, eye_to_hand=True):
+# class Cam2gripper:
+#     def calibrate_eye_hand(R_gripper2base, t_gripper2base, R_target2cam, t_target2cam, eye_to_hand=True):
 
-        if  eye_to_hand:
-            # change coordinates from gripper2base to base2gripper
-            R_base2gripper, t_base2gripper = [], []
+#         if  eye_to_hand:
+#             # change coordinates from gripper2base to base2gripper
+#             R_base2gripper, t_base2gripper = [], []
 
 
-            # mesh = o3d.geometry.TriangleMesh.create_coordinate_frame()
-            # T = np.eye(4)
-            # T[:3, :3] = mesh.get_rotation_matrix_from_xyz((0, np.pi / 3, np.pi / 2))
-            # T[:3, -1] = [1,1,1]
-            # print(T)
+#             # mesh = o3d.geometry.TriangleMesh.create_coordinate_frame()
+#             # T = np.eye(4)
+#             # T[:3, :3] = mesh.get_rotation_matrix_from_xyz((0, np.pi / 3, np.pi / 2))
+#             # T[:3, -1] = [1,1,1]
+#             # print(T)
       
 
-            for R, t in zip(R_gripper2base, t_gripper2base):
-                R_b2g = R.T
-                t_b2g = -R_b2g @t
-                R_base2gripper.append(R_b2g)
-                t_base2gripper.append(t_b2g)
-                # change parameters values
-                R_gripper2base = R_base2gripper
-                t_gripper2base = t_base2gripper
+#             # for R, t in zip(R_gripper2base, t_gripper2base):
+#             #     R_b2g = R.T
+#             #     t_b2g = -R_b2g @t
+#             #     R_base2gripper.append(R_b2g)
+#             #     t_base2gripper.append(t_b2g)
+#             #     # change parameters values
+#             #     R_gripper2base = R_base2gripper
+#             #     t_gripper2base = t_base2gripper
 
-            # calibrate
-            R, t = cv2.calibrateHandEye(
-            R_gripper2base=R_gripper2base,
-            t_gripper2base=t_gripper2base,
-            R_target2cam=R_target2cam,
-            t_target2cam=t_target2cam,
-            )
+#             # # calibrate
+#             # R, t = cv2.calibrateHandEye(
+#             # R_gripper2base=R_gripper2base,
+#             # t_gripper2base=t_gripper2base,
+#             # R_target2cam=R_target2cam,
+#             # t_target2cam=t_target2cam,
+#             # )
 
-            return R, t
+#             return R, t
 
 if __name__ == '__main__':
     import copy
+
     def toM(list):
 
         return np.asarray(list)/1000
 
-   
+    def D2R(list):
+        return np.asarray(list)*np.math.pi/180
+
     mesh = o3d.geometry.TriangleMesh.create_coordinate_frame()
     T = np.eye(4)
-    T[:3, :3] = _temp = mesh.get_rotation_matrix_from_xyz((0, 0, -1.93))
-    T[:3, -1] = toM([22.6, -774.96, 702.03])
-    # print(_temp)
-    # print(T)
+    # _temp = R.from_euler('xyz', [-90, 0, 90], degrees=True).as_quat()
+    # _temp = R.from_euler('zyx', [90, 0, -90], degrees=True).as_quat()
+    # r = R.from_quat(_temp)
+    # print()
+    # print(r.as_matrix())
+    # T[:3, :3] = r.as_matrix()
+    T[:3, :3] = _temp2 = mesh.get_rotation_matrix_from_xyz(D2R([-83.06, -3.86, 93.76]))
+    T[:3, -1] = toM([577.8, -57.85, 627.37])
+    # print(_temp2)
+    # print()
+    print(T)
 
-    c2g = Cam2gripper
-    R_gripper2base = [b2g_pose1[:3,:3],b2g_pose2[:3,:3],b2g_pose3[:3,:3]]
-    t_gripper2base = [b2g_pose1[:3,3],b2g_pose2[:3,3],b2g_pose3[:3,3]]
-    R_target2cam = [c2m_pose1[:3,:3],c2m_pose2[:3,:3],c2m_pose3[:3,:3]]
-    t_target2cam = [c2m_pose1[:3,3],c2m_pose2[:3,3],c2m_pose3[:3,3]]
+    # c2g = Cam2gripper
+    # R_gripper2base = [b2g_pose1[:3,:3],b2g_pose2[:3,:3],b2g_pose3[:3,:3]]
+    # t_gripper2base = [b2g_pose1[:3,3],b2g_pose2[:3,3],b2g_pose3[:3,3]]
+    # R_target2cam = [c2m_pose1[:3,:3],c2m_pose2[:3,:3],c2m_pose3[:3,:3]]
+    # t_target2cam = [c2m_pose1[:3,3],c2m_pose2[:3,3],c2m_pose3[:3,3]]
     
-    R ,t = c2g.calibrate_eye_hand(R_gripper2base,t_gripper2base,R_target2cam,t_target2cam)
+    # R ,t = c2g.calibrate_eye_hand(R_gripper2base,t_gripper2base,R_target2cam,t_target2cam)
 
     mesh = o3d.geometry.TriangleMesh.create_coordinate_frame(1)
     mesh_trans = o3d.geometry.TriangleMesh.create_coordinate_frame(0.5)
