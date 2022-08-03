@@ -1,5 +1,8 @@
 import sys
-# sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
+try:
+    sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
+except:
+    pass
 import cv2
 import yaml
 
@@ -9,11 +12,10 @@ import open3d as o3d
 
 from cv2 import aruco
 
-class Camera:
+class IntelCamera:
     def __init__(self, cfg):
-
+        
         self.cfg = cfg
-
         self.context = rs.context()
         self.pipeline = rs.pipeline()
         self.config = rs.config()
@@ -49,7 +51,14 @@ class Camera:
         self.ppx = self.color_intrinsic.ppx
         self.ppy = self.color_intrinsic.ppy
 
+        if self.device_product_line == 'L500':
+            self.intrinsic_o3d = o3d.camera.PinholeCameraIntrinsic(960, 540, self.fx, self.fy, self.ppx, self.ppy)
+        
+        else:
+            self.intrinsic_o3d = o3d.camera.PinholeCameraIntrinsic(640, 480, self.fx, self.fy, self.ppx, self.ppy)
+
         self.camera_mat = np.array([[self.fx, 0, self.ppx], [0, self.fy, self.ppy], [0, 0, 1]], dtype=np.float)
+
         self.dist_coeffs = np.zeros(4)
         self.colorizer = rs.colorizer(color_scheme = 2)
 
@@ -58,7 +67,7 @@ class Camera:
         self.aruco_dict = aruco.Dictionary_get(aruco.DICT_6X6_250)
         self.aruco_dict_ch = aruco.Dictionary_get(aruco.DICT_4X4_250)
     
-    def stream(self, colored_depth = False):
+    def stream(self):
         
         frames = self.pipeline.wait_for_frames()
         frames = self.align.process(frames)
@@ -78,35 +87,14 @@ class Camera:
         return self.color_image, self.depth_image
 
     def generate(self, depth):
-        self.pcd = o3d.geometry.PointCloud()
-        ## return raw point cloud self.xyz from intensity-aligned depth map
-        ## using color intrinsics and vectorized computation programing technique
-        w                = np.shape(depth)[1]
-        h                = np.shape(depth)[0]
-        z                = depth * self.depth_scale  # raw distance
-        u                = np.arange(0, w)
-        v                = np.arange(0, h)
-        mesh_u, mesh_v   = np.meshgrid(u, v)
-        mesh_x           = (mesh_u - self.ppx) * z / self.fx
-        mesh_y           = (mesh_v - self.ppy) * z / self.fy
-        ## remove zeros and NaN values from x, y, z  this is valid regardless of if depth image is filtered or not
-        if np.any(z == 0) or np.isnan(z).any():
-            z = z[np.nonzero(z)]
-            z = z[~ np.isnan(z)]
-            mesh_x = mesh_x[np.nonzero(mesh_x)]
-            mesh_x = mesh_x[~ np.isnan(mesh_x)]
-            mesh_y = mesh_y[np.nonzero(mesh_y)]
-            mesh_y = mesh_y[~ np.isnan(mesh_y)]
-        ## raw point cloud in numpy format
-        self.xyz         = np.zeros((np.size(mesh_x), 3))
-        self.xyz[:, 0]   = np.reshape(mesh_x, -1)
-        self.xyz[:, 1]   = np.reshape(mesh_y, -1)
-        self.xyz[:, 2]   = np.reshape(z,      -1)
-        ## raw point cloud in o3d format
-        self.pcd.points  = o3d.utility.Vector3dVector(self.xyz)
-        # self.pcd = self.pcd.voxel_down_sample(voxel_size = 0.004)
+        depth_o3d = o3d.geometry.Image(depth)
+        if self.device_product_line == 'L500':
+            self.pcd = o3d.geometry.PointCloud.create_from_depth_image(depth_o3d, self.intrinsic_o3d, depth_scale=4000.0)
+        else:
+            self.pcd = o3d.geometry.PointCloud.create_from_depth_image(depth_o3d, self.intrinsic_o3d, depth_scale=1000.0)
         self.pcd = self.pcd.voxel_down_sample(voxel_size = 0.008)
-        self.xyz         = np.asarray(self.pcd.points)
+        self.xyz = np.asarray(self.pcd.points)
+        print(pcd)
         return self.xyz
 
     def drawWorkSpace(self):
@@ -265,6 +253,52 @@ class Camera:
 
         return xyz
 
+class KinectCamera(IntelCamera):
+    def __init__(self, cfg):
+        self.fx = 607.4124755859375
+        self.fy = 607.33538818359375
+        self.ppx = 637.793212890625
+        self.ppy = 365.12252807617188
+        self.depth_scale = 0.001 # mm to m scale
+
+        self.intrinsic_o3d = o3d.camera.PinholeCameraIntrinsic(1280, 720, self.fx, self.fy, self.ppx, self.ppy)
+        self.camera_mat = np.array([[self.fx, 0, self.ppx], [0, self.fy, self.ppy], [0, 0, 1]], dtype=np.float)
+        self.dist_coeffs = np.zeros(4)
+
+        self.saw_yaml = False
+        self.saw_charuco = False
+        self.aruco_dict = aruco.Dictionary_get(aruco.DICT_6X6_250)
+        self.aruco_dict_ch = aruco.Dictionary_get(aruco.DICT_4X4_250)
+        self.cfg = cfg
+
+        self.config = o3d.io.AzureKinectSensorConfig()
+        self.sensor = o3d.io.AzureKinectSensor(self.config)
+        self.device = 0
+
+        if not self.sensor.connect(self.device):
+            raise RuntimeError('Failed to connect to sensor')
+        
+        else:
+            print('MicroSoft AzureKinect' + " is ready")
+            self.device_product_line = 'AzureKinect'
+
+        self._dummy_frame = 0
+
+    def stream(self):
+        
+        align_depth_to_color = True
+
+        rgbd = self.sensor.capture_frame(align_depth_to_color)
+
+        while rgbd is None:
+            rgbd = self.sensor.capture_frame(align_depth_to_color)
+            
+        rgb = np.asarray(rgbd.color)
+        self.color_image = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+        self.depth_image = np.asarray(rgbd.depth)
+
+        return self.color_image, self.depth_image
+
 if __name__ == '__main__':
     import os
     ref_path = os.getcwd()
@@ -273,7 +307,8 @@ if __name__ == '__main__':
     #     cfg = yaml.load(f, Loader=yaml.FullLoader)
     #     cfg['TF']['end2cam'] = np.reshape(cfg['TF']['end2cam'], (4, 4))
     cfg = []
-    cam = Camera(cfg)
+    cam = KinectCamera(cfg)
+    # cam = IntelCamera(cfg)
     print(cam.depth_scale)
 
     pcd = o3d.geometry.PointCloud()
@@ -282,25 +317,25 @@ if __name__ == '__main__':
     added = True
 
     while 1:
-        rgb_img, depth_img = cam.stream(colored_depth=False)
-        cam.detectCharuco()
+        rgb_img, depth_img = cam.stream()
+        # cam.detectCharuco()
 
-        print(cam.cam2marker)
+        # print(cam.cam2marker)
         # print(np.average(depth_img*0.00025))
-        # xyz = cam.generate(depth_img)
+        xyz = cam.generate(depth_img)
         # cam.detectCharuco()
         # xyz = cam.cropPoints()
-        # pcd.points = o3d.utility.Vector3dVector(xyz)
+        pcd.points = o3d.utility.Vector3dVector(xyz)
 
         ## visualize rgb and depth image
         cv2.imshow("rgb", rgb_img)
         # cv2.imshow("depth", depth_img)
         cv2.waitKey(1)
 
-        ## visualize point cloud caculated from the depth image
-        # if added == True:
-        #     vis.add_geometry(pcd)
-        #     added = False
-        # vis.update_geometry(pcd)
-        # vis.poll_events()
-        # vis.update_renderer()
+        # visualize point cloud caculated from the depth image
+        if added == True:
+            vis.add_geometry(pcd)
+            added = False
+        vis.update_geometry(pcd)
+        vis.poll_events()
+        vis.update_renderer()
