@@ -1,4 +1,9 @@
+##############################################################
+#   camera.py
+#   version: 3.0 (edited in 2022.09.02)
+##############################################################
 import sys
+import os
 try:
     sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
 except:
@@ -11,6 +16,7 @@ import numpy as np
 import open3d as o3d
 
 from cv2 import aruco
+import copy
 
 class IntelCamera:
     def __init__(self, cfg):
@@ -86,44 +92,46 @@ class IntelCamera:
 
         return self.color_image, self.depth_image
 
-    def generate(self, depth):
+    def generate(self, depth, downsample=True):
         depth_o3d = o3d.geometry.Image(depth)
         if self.device_product_line == 'L500':
             self.pcd = o3d.geometry.PointCloud.create_from_depth_image(depth_o3d, self.intrinsic_o3d, depth_scale=4000.0)
         else:
             self.pcd = o3d.geometry.PointCloud.create_from_depth_image(depth_o3d, self.intrinsic_o3d, depth_scale=1000.0)
-        self.pcd = self.pcd.voxel_down_sample(voxel_size = 0.008)
+        if downsample:
+            self.pcd = self.pcd.voxel_down_sample(voxel_size = 0.006)
         self.xyz = np.asarray(self.pcd.points)
-        print(pcd)
         return self.xyz
 
-    def drawWorkSpace(self):
-        corner = np.reshape([-self.offset_from_corner, self.offset_from_corner, 0, 1], (4, 1))
-        corner101_from_cam = np.dot(self.cam2marker, corner)[:3]
-        pixel = (np.dot(self.camera_mat, corner101_from_cam)/corner101_from_cam[-1])[:2]
+    def draw_workspace(self):
+        self.orig_stored_cam2marker = copy.deepcopy(self.stored_cam2marker)
+        marker_frame_center = self.stored_cam2marker[:3, 3]
+        marker_frame_center[0] = marker_frame_center[0] + 0.05
+        marker_frame_center[1] = marker_frame_center[1] - 0.025
+        pixel = (np.dot(self.camera_mat, marker_frame_center)/marker_frame_center[-1])[:2]
         pixel = pixel.astype(np.int64)
         pixel = np.reshape(pixel, (2,))
         pixel = tuple(pixel)
         cv2.circle(img=self.color_image, center=pixel, radius=4, color=(0, 0, 255), thickness=-1)
 
-        width_end_point = np.reshape([-self.offset_from_corner, self.offset_from_corner-self.W, 0, 1], (4, 1))
-        width_end_point_from_cam = np.dot(self.cam2marker, width_end_point)[:3]
+        width_end_point = np.reshape([self.W, 0, 0, 1], (4, 1))
+        width_end_point_from_cam = np.dot(self.stored_cam2marker, width_end_point)[:3]
         pixel_width = (np.dot(self.camera_mat, width_end_point_from_cam)/width_end_point_from_cam[-1])[:2]
         pixel_width = pixel_width.astype(np.int64)
         pixel_width = np.reshape(pixel_width, (2,))
         pixel_width = tuple(pixel_width)
         cv2.circle(img=self.color_image, center=pixel_width, radius=4, color=(0, 0, 255), thickness=-1)
 
-        height_end_point = np.reshape([-self.offset_from_corner+self.L, self.offset_from_corner, 0, 1], (4, 1))
-        height_end_point_from_cam = np.dot(self.cam2marker, height_end_point)[:3]
+        height_end_point = np.reshape([0, self.H, 0, 1], (4, 1))
+        height_end_point_from_cam = np.dot(self.stored_cam2marker, height_end_point)[:3]
         pixel_length = (np.dot(self.camera_mat, height_end_point_from_cam)/height_end_point_from_cam[-1])[:2]
         pixel_length = pixel_length.astype(np.int64)
         pixel_length = np.reshape(pixel_length, (2,))
         pixel_length = tuple(pixel_length)
         cv2.circle(img=self.color_image, center=pixel_length, radius=4, color=(0, 0, 255), thickness=-1)
 
-        vector2corner4th = np.reshape([-self.offset_from_corner+self.L, self.offset_from_corner-self.W, 0, 1], (4, 1))
-        vector2corner4th_from_cam = np.dot(self.cam2marker, vector2corner4th)[:3]
+        vector2corner4th = np.reshape([self.W, self.H, 0, 1], (4, 1))
+        vector2corner4th_from_cam = np.dot(self.stored_cam2marker, vector2corner4th)[:3]
         pixel_4th = (np.dot(self.camera_mat, vector2corner4th_from_cam)/vector2corner4th_from_cam[-1])[:2]
         pixel_4th = pixel_4th.astype(np.int64)
         pixel_4th = np.reshape(pixel_4th, (2,))
@@ -134,6 +142,8 @@ class IntelCamera:
         cv2.line(img=self.color_image, pt1=pixel, pt2=pixel_length, color=(0, 0, 255), thickness=2)
         cv2.line(img=self.color_image, pt1=pixel_4th, pt2=pixel_width, color=(0, 0, 255), thickness=2)
         cv2.line(img=self.color_image, pt1=pixel_4th, pt2=pixel_length, color=(0, 0, 255), thickness=2)
+
+        self.stored_cam2marker = self.orig_stored_cam2marker
 
     def detectCharuco(self):
         if self.saw_charuco != True:
@@ -159,61 +169,27 @@ class IntelCamera:
                 aruco.drawAxis(self.color_image, self.camera_mat, self.dist_coeffs, rvec, tvec, 0.07)
                 aruco.drawDetectedCornersCharuco(self.color_image, charuco_corners, charuco_ids, (255, 0, 0))
 
-    def detectCropRegion(self):
+    def define_workspace(self):
         if self.saw_yaml != True:
+            ref_path = os.getcwd()
             self.contents = 0
-            with open("./core/config/Bin.yml") as f:
-                Bin = yaml.load(f, Loader=yaml.FullLoader)
-                self.W = Bin["N432"][self.device_name]["Width"]
-                self.L = Bin["N432"][self.device_name]["Length"]
-                self.marker_size = Bin["N432"][self.device_name]["Marker_size"]
-                self.offset_from_corner = self.marker_size/2
-                if self.device_product_line == 'L500':
-                    self.xp_off = Bin['L515']['xp_off']
-                    self.xn_off = Bin['L515']['xn_off']
-                    self.yp_off = Bin['L515']['yp_off']
-                    self.yn_off = Bin['L515']['yn_off']
-                elif self.device_product_line == 'D400':
-                    self.xp_off = Bin['D400']['xp_off']
-                    self.xn_off = Bin['D400']['xn_off']
-                    self.yp_off = Bin['D400']['yp_off']
-                    self.yn_off = Bin['D400']['yn_off']
+
+            with open(ref_path+"/src/suction_net_ros/config/workspace.yml") as f:
+                workspace_cfg = yaml.load(f, Loader=yaml.FullLoader)
                 self.saw_yaml = True
+                self.W = workspace_cfg["width"]
+                self.H = workspace_cfg["height"]
+                self.stored_cam2marker = workspace_cfg['cam2marker']
+                self.stored_cam2marker = np.reshape(self.stored_cam2marker, (4, 4))
 
-        if self.cfg['use_pre_marker_pose'] == False:
-            gray_img = cv2.cvtColor(self.color_image, cv2.COLOR_BGR2GRAY)
-            parameters = aruco.DetectorParameters_create()
-            corners, ids, _ = aruco.detectMarkers(gray_img, self.aruco_dict, parameters=parameters)
-            self.color_image = aruco.drawDetectedMarkers(self.color_image, corners, ids)
-            if np.shape(corners)[0] > 0:
-                for i in range(np.shape(corners)[0]):
-                    if ids[i] == 101:
-                        if self.contents < 10:
-                            self.rvecs, self.tvecs, _ = aruco.estimatePoseSingleMarkers(corners[i], self.marker_size, cameraMatrix=self.camera_mat, distCoeffs=self.dist_coeffs)
-                            self.contents += 1
-                            print(self.contents, end="\r")
-                        else:
-                            pass
-                        self.color_image = cv2.drawFrameAxes(self.color_image, cameraMatrix=self.camera_mat, distCoeffs=self.dist_coeffs, rvec=self.rvecs, tvec=self.tvecs, length=0.06, thickness=2)
-
-                        R, _ = cv2.Rodrigues(self.rvecs)
-                        self.tvecs = np.reshape(self.tvecs, (3, 1))
-                        self.cam2marker = np.concatenate((R, self.tvecs), axis = 1)
-                        self.cam2marker = np.concatenate((self.cam2marker, np.array([[0, 0, 0, 1]])), axis = 0)
-
-                        self.drawWorkSpace()
-
-        else:
-            self.cam2marker = self.cfg['TF']['cam2marker']
-            self.cam2marker = np.reshape(self.cam2marker, (4, 4))
-            self.drawWorkSpace()
+        self.draw_workspace()
                     
-    def cropPoints(self):
+    def crop_points(self):
 
-        self.detectCropRegion()
+        self.define_workspace()
 
-        R = self.cam2marker[:3, :3]
-        self.tvecs = self.cam2marker[:3, 3]
+        R = self.stored_cam2marker[:3, :3]
+        self.tvecs = self.stored_cam2marker[:3, 3]
         R_inv = np.transpose(R)
         t_inv = -1 * np.dot(R_inv, self.tvecs)
         t_inv = np.reshape(t_inv, (3, 1))
@@ -221,16 +197,13 @@ class IntelCamera:
         H_inv = np.concatenate((H_inv, np.array([[0, 0, 0, 1]])), axis = 0)
         self.pcd.transform(H_inv)
         self.xyz = np.asarray(self.pcd.points)
-        
-        if self.device_product_line == 'L500':
-            valid_idx = np.where(((self.xyz[:, 0] > -self.xn_off) & (self.xyz[:, 0] < -(-self.L + self.xp_off))) & ((self.xyz[:, 1] < self.yp_off) & (self.xyz[:, 1] > (-self.W + self.yn_off))) & (self.xyz[:, 2] > 0.005))[0]
-        elif self.device_product_line == 'D400':
-            valid_idx = np.where(((self.xyz[:, 0] > -self.xn_off) & (self.xyz[:, 0] < -(-self.L + self.xp_off))) & ((self.xyz[:, 1] < self.yp_off) & (self.xyz[:, 1] > (-self.W + self.yn_off))) &  (self.xyz[:, 2] > 0.035))[0]
+        valid_idx = np.where(((self.xyz[:, 0] > -0.05) & (self.xyz[:, 0] < (self.W - 0.05))) & ((self.xyz[:, 1] > -0.025) & (self.xyz[:, 1] < (self.H-0.025 ))) & (self.xyz[:, 2] > -0.05) & (self.xyz[:, 2] < 0.3))[0]
+
         self.pcd = self.select_by_index(self.pcd, valid_idx)
         # self.pcd = self.pcd.select_by_index(valid_idx)
 
         ## transform point cloud to original frame (camera frame)
-        self.pcd.transform(self.cam2marker)
+        self.pcd.transform(self.stored_cam2marker)
         self.xyz = np.asarray(self.pcd.points)
         return self.xyz
 
@@ -307,8 +280,8 @@ if __name__ == '__main__':
     #     cfg = yaml.load(f, Loader=yaml.FullLoader)
     #     cfg['TF']['end2cam'] = np.reshape(cfg['TF']['end2cam'], (4, 4))
     cfg = []
-    cam = KinectCamera(cfg)
-    # cam = IntelCamera(cfg)
+    # cam = KinectCamera(cfg)
+    cam = IntelCamera(cfg)
     print(cam.depth_scale)
 
     pcd = o3d.geometry.PointCloud()
