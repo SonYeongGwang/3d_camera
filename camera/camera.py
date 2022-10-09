@@ -1,6 +1,6 @@
 ##############################################################
 #   camera.py
-#   version: 3.0 (edited in 2022.09.02)
+#   version: 3.0.1 (edited in 2022.10.09)
 ##############################################################
 import sys
 import os
@@ -291,14 +291,14 @@ if __name__ == '__main__':
 
     while 1:
         rgb_img, depth_img = cam.stream()
-        # cam.detectCharuco()
+        cam.detectCharuco()
 
-        # print(cam.cam2marker)
+        print(cam.cam2marker)
         # print(np.average(depth_img*0.00025))
-        xyz = cam.generate(depth_img)
+        # xyz = cam.generate(depth_img)
         # cam.detectCharuco()
         # xyz = cam.cropPoints()
-        pcd.points = o3d.utility.Vector3dVector(xyz)
+        # pcd.points = o3d.utility.Vector3dVector(xyz)
 
         ## visualize rgb and depth image
         cv2.imshow("rgb", rgb_img)
@@ -306,9 +306,9 @@ if __name__ == '__main__':
         cv2.waitKey(1)
 
         # visualize point cloud caculated from the depth image
-        if added == True:
-            vis.add_geometry(pcd)
-            added = False
-        vis.update_geometry(pcd)
-        vis.poll_events()
-        vis.update_renderer()
+        # if added == True:
+            # vis.add_geometry(pcd)
+            # added = False
+        # vis.update_geometry(pcd)
+        # vis.poll_events()
+        # vis.update_renderer()
