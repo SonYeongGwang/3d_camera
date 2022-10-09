@@ -1,46 +1,61 @@
 import sys
-# sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
+sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
 import cv2
 import numpy as np
 import open3d as o3d
 from scipy.spatial.transform import Rotation as R
+########################################################이거 쓰시면 댑니다 ^^v
+ #[[-0.09088078 -0.99574393  0.01532044  0.07322322]
+ #[-0.99564129  0.09052619 -0.02243697 -0.98057482]
+ #[ 0.02095458 -0.01729274 -0.99963086  0.87000959]
+ #[ 0.          0.          0.          1.        ]]
+#####################################################
 
-c2m_pose = np.asarray([[ 0.99086343, -0.08311511, -0.10621463, -0.1016177 ],
- [-0.06862307, -0.9886728,   0.13348023,  0.08618921],
- [-0.11610574, -0.1249719,  -0.98534333,  0.31929494],
- [ 0.        ,  0.       ,   0.        ,  1.        ]]
+
+
+
+
+c2m_pose = np.asarray([[-0.08178309, -0.99662789,  0.00666149,  0.05417076],
+ [-0.99557896,  0.08138356, -0.04689606,  0.12904777],
+ [ 0.04619579, -0.01046734, -0.99887756,  0.43817951],
+ [ 0.        ,  0.        ,  0.        ,  1.        ]]
+
 )
-
 m2mc_pose = np.asarray([[1,     0,     0,     0.242/2], 
                        [0,     1,     0,     0.172/2], 
                        [0,     0,     1,     -0.003 ], 
                        [0,     0,     0,     1     ]])
 
-mc2e_pose = np.asarray([[0, 0, 1, 0],
-                        [0, 1, 0 , 0],
-                        [-1, 0, 0, 0],
-                        [0, 0, 0, 1]])
-# mc2e_pose = np.eye(4,4)
+# for rb10
+# mc2e_pose = np.asarray([[0, 0, 1, 0],
+#                         [0, 1, 0 , 0],
+#                         [-1, 0, 0, 0],
+#                         [0, 0, 0, 1]])
 
-b2e_pose = np.asarray([[-0.06542853, -0.9955839,  -0.06731876,  0.5778    ],
- [ 0.11618756, -0.07460538,  0.99042137, -0.05785   ],
- [-0.99106991,  0.05698021,  0.12055578,  0.62737   ],
- [ 0.        ,  0.        ,  0.        ,  1.        ]]
+
+#for ur10
+mc2e_pose = np.eye(4,4)
+
+b2e_pose = np.asarray([[ 1.,       0.  ,     0. ,      0.10217],
+ [ 0.,       1.,       0.,      -0.88   ],
+ [ 0.,       0.,       1.,       0.51903],
+ [ 0.,       0.,       0.,       1.     ]]
+
 )
 
-b2e_pose_R = b2e_pose[:3, :3]
-b2e_pose_t = b2e_pose[:3, 3]
+# b2e_pose_R = b2e_pose[:3, :3]
+# b2e_pose_t = b2e_pose[:3, 3]
 
-b2e_pose_inv = np.zeros_like(b2e_pose)
-b2e_pose_inv[:3, :3] = b2e_pose_R.T
-b2e_pose_inv[:3, 3] = -b2e_pose_R.T @ b2e_pose_t
-b2e_pose_inv[-1,-1] = 1
+# b2e_pose_inv = np.zeros_like(b2e_pose)
+# b2e_pose_inv[:3, :3] = b2e_pose_R.T
+# b2e_pose_inv[:3, 3] = -b2e_pose_R.T @ b2e_pose_t
+# b2e_pose_inv[-1,-1] = 1
 
 # c2e = np.dot(np.dot(c2m_pose, m2mc_pose), mc2e_pose)
 # print(c2e)
 
-print("A\n", b2e_pose_inv)
-print("B\n",np.linalg.inv(b2e_pose))
+# print("A\n", b2e_pose_inv)
+# print("B\n",np.linalg.inv(b2e_pose))
 
 c2b = np.dot(np.dot(np.dot(c2m_pose, m2mc_pose), mc2e_pose), np.linalg.inv(b2e_pose))
 b2c = np.linalg.inv(c2b)
@@ -49,12 +64,12 @@ print("b2c^^v\n",b2c)
 # c2b = np.dot(c2g_pose, np.linalg.inv(b2g_pose))
 # b2c = np.linalg.inv(c2b)
 
-# c2m = np.asarray([[-0.01245396, -0.99990607,  0.00572225, -0.22365874],
-#  [-0.9999106  , 0.01248147 , 0.0047971  , 0.29990225],
-#  [-0.00486808 ,-0.00566199 ,-0.99997212 , 0.98127839],
-#  [ 0.         , 0.         , 0.         , 1.        ]])
+# c2m = np.asarray([[-0.01245926, -0.99905093, -0.04173723, -0.08563992],
+#  [-0.99800642,  0.00984184,  0.06234035,  0.03953801],
+#  [-0.06187041,  0.04243074, -0.99718187,  1.00480634],
+#  [ 0.        ,  0.        ,  0.        ,  1.        ]])
 
-# m2b = np.asarray([[1, 0, 0, 0], [0, 1, 0, 0.62], [0, 0, 1, -0.02], [0, 0, 0, 1]])
+# m2b = np.asarray([[1, 0, 0, 0], [0, 1, 0, 0.97], [0, 0, 1, -0.02], [0, 0, 0, 1]])
 
 # c2b = np.dot(c2m, m2b)
 # b2c = np.linalg.inv(c2b)
@@ -114,8 +129,8 @@ if __name__ == '__main__':
     # print()
     # print(r.as_matrix())
     # T[:3, :3] = r.as_matrix()
-    T[:3, :3] = _temp2 = mesh.get_rotation_matrix_from_xyz(D2R([-83.06, -3.86, 93.76]))
-    T[:3, -1] = toM([577.8, -57.85, 627.37])
+    T[:3, :3] = _temp2 = mesh.get_rotation_matrix_from_xyz((0, 0, 0))
+    T[:3, -1] = toM([102.17, -880, 519.03])
     # print(_temp2)
     # print()
     print(T)
