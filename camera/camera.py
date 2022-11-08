@@ -69,8 +69,10 @@ class IntelCamera:
         self.colorizer = rs.colorizer(color_scheme = 2)
 
         self.saw_yaml = False
+        self.saw_aruco = False
         self.saw_charuco = False
-        self.aruco_dict = aruco.Dictionary_get(aruco.DICT_6X6_250)
+        self.aruco_marker_size = 0.08
+        self.aruco_dict = aruco.Dictionary_get(aruco.DICT_4X4_50)
         self.aruco_dict_ch = aruco.Dictionary_get(aruco.DICT_4X4_250)
     
     def stream(self):
@@ -145,6 +147,25 @@ class IntelCamera:
 
         self.stored_cam2marker = self.orig_stored_cam2marker
 
+    def detectAruco(self):
+        if self.saw_aruco != True:
+            parameters = aruco.DetectorParameters_create()
+            self.saw_aruco = True
+
+        gray_img = cv2.cvtColor(self.color_image, cv2.COLOR_BGR2GRAY)
+        corners, ids, _ = aruco.detectMarkers(gray_img, self.aruco_dict, parameters=parameters)
+        frame_markers = aruco.drawDetectedMarkers(self.color_image.copy(), corners, ids)
+        if np.shape(corners)[0] > 0:
+                for i in range(np.shape(corners)[0]):
+                    rvecs, tvecs, _ = aruco.estimatePoseSingleMarkers(corners[i], self.aruco_marker_size, cameraMatrix=cam.camera_mat, distCoeffs=cam.distCoeffs)
+                    frame_markers = cv2.drawFrameAxes(frame_markers, cameraMatrix=cam.camera_mat, distCoeffs=cam.distCoeffs, rvec=rvecs, tvec=tvecs, length=0.050, thickness=2)
+                    ## for SE3 trasnformation matrix (marker with respect to the camera)
+                    R, _ = cv2.Rodrigues(rvecs)
+                    tvecs = np.reshape(tvecs, (3, 1))
+                    cam2marker = np.concatenate((R, tvecs), axis = 1)
+                    ## add [0, 0, 0, 1] to make it SE3 format
+                    cam2marker = np.concatenate((cam2marker, np.array([[0, 0, 0, 1]])), axis = 0)
+
     def detectCharuco(self):
         if self.saw_charuco != True:
             self.board = aruco.CharucoBoard_create(7, 5, 0.035, 0.025, self.aruco_dict_ch)
@@ -168,6 +189,18 @@ class IntelCamera:
                 self.cam2marker = np.concatenate((self.cam2marker, np.array([[0, 0, 0, 1]])), axis = 0)
                 aruco.drawAxis(self.color_image, self.camera_mat, self.dist_coeffs, rvec, tvec, 0.07)
                 aruco.drawDetectedCornersCharuco(self.color_image, charuco_corners, charuco_ids, (255, 0, 0))
+
+    def create_aruco_marker(self, dict):
+        if not isinstance(dict, cv2.aruco_Dictionary):
+            dict = aruco.Dictionary_get(dict)
+        marker_generated = aruco.drawMarker(dict, 0, 600, 1)
+        print(marker_generated.shape)
+        print("ArUco Dictionary:", dict)
+        print("ArUco Marker is created!")
+
+        cv2.imshow("AruCo Marker", marker_generated) # Show image file
+        cv2.imwrite("AruCo Marker.png", marker_generated) # Save image file
+        cv2.waitKey() # Maintain until keyboard input
 
     def define_workspace(self):
         if self.saw_yaml != True:
@@ -273,6 +306,9 @@ class KinectCamera(IntelCamera):
         return self.color_image, self.depth_image
 
 if __name__ == '__main__':
+
+    # cam = IntelCamera(cfg=[])
+    # cam.create_aruco_marker(aruco.DICT_6X6_50)
     import os
     ref_path = os.getcwd()
 
