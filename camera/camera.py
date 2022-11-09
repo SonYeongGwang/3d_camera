@@ -71,9 +71,11 @@ class IntelCamera:
         self.saw_yaml = False
         self.saw_aruco = False
         self.saw_charuco = False
-        self.aruco_marker_size = 0.08
+        self.aruco_marker_size = 0.054
         self.aruco_dict = aruco.Dictionary_get(aruco.DICT_4X4_50)
         self.aruco_dict_ch = aruco.Dictionary_get(aruco.DICT_4X4_250)
+
+        self.z_min = -0.05
     
     def stream(self):
         
@@ -149,22 +151,22 @@ class IntelCamera:
 
     def detectAruco(self):
         if self.saw_aruco != True:
-            parameters = aruco.DetectorParameters_create()
+            self.parameters = aruco.DetectorParameters_create()
             self.saw_aruco = True
 
         gray_img = cv2.cvtColor(self.color_image, cv2.COLOR_BGR2GRAY)
-        corners, ids, _ = aruco.detectMarkers(gray_img, self.aruco_dict, parameters=parameters)
-        frame_markers = aruco.drawDetectedMarkers(self.color_image.copy(), corners, ids)
+        corners, ids, _ = aruco.detectMarkers(gray_img, self.aruco_dict, parameters=self.parameters)
+        frame_markers = aruco.drawDetectedMarkers(self.color_image, corners, ids)
         if np.shape(corners)[0] > 0:
                 for i in range(np.shape(corners)[0]):
-                    rvecs, tvecs, _ = aruco.estimatePoseSingleMarkers(corners[i], self.aruco_marker_size, cameraMatrix=cam.camera_mat, distCoeffs=cam.distCoeffs)
-                    frame_markers = cv2.drawFrameAxes(frame_markers, cameraMatrix=cam.camera_mat, distCoeffs=cam.distCoeffs, rvec=rvecs, tvec=tvecs, length=0.050, thickness=2)
+                    rvecs, tvecs, _ = aruco.estimatePoseSingleMarkers(corners[i], self.aruco_marker_size, cameraMatrix=cam.camera_mat, distCoeffs=cam.dist_coeffs)
+                    frame_markers = cv2.drawFrameAxes(frame_markers, cameraMatrix=cam.camera_mat, distCoeffs=cam.dist_coeffs, rvec=rvecs, tvec=tvecs, length=0.050, thickness=2)
                     ## for SE3 trasnformation matrix (marker with respect to the camera)
                     R, _ = cv2.Rodrigues(rvecs)
                     tvecs = np.reshape(tvecs, (3, 1))
-                    cam2marker = np.concatenate((R, tvecs), axis = 1)
+                    self.cam2marker = np.concatenate((R, tvecs), axis = 1)
                     ## add [0, 0, 0, 1] to make it SE3 format
-                    cam2marker = np.concatenate((cam2marker, np.array([[0, 0, 0, 1]])), axis = 0)
+                    self.cam2marker = np.concatenate((self.cam2marker, np.array([[0, 0, 0, 1]])), axis = 0)
 
     def detectCharuco(self):
         if self.saw_charuco != True:
@@ -202,12 +204,12 @@ class IntelCamera:
         cv2.imwrite("AruCo Marker.png", marker_generated) # Save image file
         cv2.waitKey() # Maintain until keyboard input
 
-    def define_workspace(self):
+    def define_workspace(self, cfg_path):
         if self.saw_yaml != True:
             ref_path = os.getcwd()
             self.contents = 0
 
-            with open(ref_path+"/src/suction_net_ros/config/workspace.yml") as f:
+            with open(cfg_path) as f:
                 workspace_cfg = yaml.load(f, Loader=yaml.FullLoader)
                 self.saw_yaml = True
                 self.W = workspace_cfg["width"]
@@ -219,7 +221,7 @@ class IntelCamera:
                     
     def crop_points(self):
 
-        self.define_workspace()
+        self.define_workspace(cfg_path = '/home/robot/3d_camera/config/workspace.yml')
 
         R = self.stored_cam2marker[:3, :3]
         self.tvecs = self.stored_cam2marker[:3, 3]
@@ -230,10 +232,10 @@ class IntelCamera:
         H_inv = np.concatenate((H_inv, np.array([[0, 0, 0, 1]])), axis = 0)
         self.pcd.transform(H_inv)
         self.xyz = np.asarray(self.pcd.points)
-        valid_idx = np.where(((self.xyz[:, 0] > -0.05) & (self.xyz[:, 0] < (self.W - 0.05))) & ((self.xyz[:, 1] > -0.025) & (self.xyz[:, 1] < (self.H-0.025 ))) & (self.xyz[:, 2] > -0.05) & (self.xyz[:, 2] < 0.3))[0]
+        valid_idx = np.where(((self.xyz[:, 0] > -0.03) & (self.xyz[:, 0] < (self.W - 0.03))) & ((self.xyz[:, 1] > -0.02) & (self.xyz[:, 1] < (self.H-0.02))) & (self.xyz[:, 2] > self.z_min) & (self.xyz[:, 2] < 0.3))[0]
 
-        self.pcd = self.select_by_index(self.pcd, valid_idx)
-        # self.pcd = self.pcd.select_by_index(valid_idx)
+        # self.pcd = self.select_by_index(self.pcd, valid_idx)
+        self.pcd = self.pcd.select_by_index(valid_idx)
 
         ## transform point cloud to original frame (camera frame)
         self.pcd.transform(self.stored_cam2marker)
@@ -327,9 +329,9 @@ if __name__ == '__main__':
 
     while 1:
         rgb_img, depth_img = cam.stream()
-        cam.detectCharuco()
+        cam.detectAruco()
 
-        print(cam.cam2marker)
+        # print(cam.cam2marker)
         # print(np.average(depth_img*0.00025))
         # xyz = cam.generate(depth_img)
         # cam.detectCharuco()
