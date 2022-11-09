@@ -1,1 +1,1 @@
-from .camera import Camera
+from .camera import IntelCamera, KinectCamera
