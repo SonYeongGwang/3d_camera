@@ -1,5 +1,8 @@
 import sys
-# sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
+try:
+    sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
+except:
+    pass
 import cv2
 import numpy as np
 import open3d as o3d
