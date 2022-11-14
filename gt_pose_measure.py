@@ -169,6 +169,8 @@ while 1:
         print("Generated shape meta information!")
         print("-"*50)
 
+        o3d.io.write_point_cloud("./shape_info/scene.pcd", pcd)
+
     elif key == ord('r'):
         print("select trasnsform resolution level (currnet:{})".format(transform_resolution))
         transform_resolution = float(input())
