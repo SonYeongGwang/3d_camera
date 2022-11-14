@@ -115,6 +115,7 @@ added = False
 while 1:
 
     win = cv2.namedWindow("key")
+    cv2.imshow("rgb", rgb_img)
     key = cv2.waitKey(1)
 
     if key == ord('q'):
