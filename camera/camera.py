@@ -1,6 +1,6 @@
 ##############################################################
 #   camera.py
-#   version: 3.1.0 (edited in 2022.11.09)
+#   version: 3.1.1 (edited in 2023.02.02)
 ##############################################################
 import sys
 import os
@@ -110,8 +110,8 @@ class IntelCamera:
     def draw_workspace(self):
         self.orig_stored_cam2marker = copy.deepcopy(self.stored_cam2marker)
         marker_frame_center = self.stored_cam2marker[:3, 3]
-        marker_frame_center[0] = marker_frame_center[0] + 0.05
-        marker_frame_center[1] = marker_frame_center[1] - 0.025
+        marker_frame_center[0] = marker_frame_center[0] + self.origin_to_corner_x
+        marker_frame_center[1] = marker_frame_center[1] - self.origin_to_corner_y
         pixel = (np.dot(self.camera_mat, marker_frame_center)/marker_frame_center[-1])[:2]
         pixel = pixel.astype(np.int64)
         pixel = np.reshape(pixel, (2,))
@@ -204,24 +204,28 @@ class IntelCamera:
         cv2.imwrite("AruCo Marker.png", marker_generated) # Save image file
         cv2.waitKey() # Maintain until keyboard input
 
-    def define_workspace(self, cfg_path):
+    def define_workspace(self):
         if self.saw_yaml != True:
-            ref_path = os.getcwd()
             self.contents = 0
 
-            with open(cfg_path) as f:
-                workspace_cfg = yaml.load(f, Loader=yaml.FullLoader)
+            home_path = os.path.expanduser('~')
+            cfg_path = home_path+'/catkin_ws/src/suction_net_ros/config/workspace.yml'
+
+            with open(cfg_path) as f:   
+                self.workspace_cfg = yaml.load(f, Loader=yaml.FullLoader)
                 self.saw_yaml = True
-                self.W = workspace_cfg["width"]
-                self.H = workspace_cfg["height"]
-                self.stored_cam2marker = workspace_cfg['cam2marker']
+                self.W = self.workspace_cfg["width"]
+                self.H = self.workspace_cfg["height"]
+                self.origin_to_corner_x = self.workspace_cfg['origin_to_corner_x']
+                self.origin_to_corner_y = self.workspace_cfg['origin_to_corner_y']
+                self.stored_cam2marker = self.workspace_cfg['cam2marker']
                 self.stored_cam2marker = np.reshape(self.stored_cam2marker, (4, 4))
 
         self.draw_workspace()
                     
     def crop_points(self):
 
-        self.define_workspace(cfg_path = '/home/robot/3d_camera/config/workspace.yml')
+        self.define_workspace()
 
         R = self.stored_cam2marker[:3, :3]
         self.tvecs = self.stored_cam2marker[:3, 3]
@@ -232,7 +236,7 @@ class IntelCamera:
         H_inv = np.concatenate((H_inv, np.array([[0, 0, 0, 1]])), axis = 0)
         self.pcd.transform(H_inv)
         self.xyz = np.asarray(self.pcd.points)
-        valid_idx = np.where(((self.xyz[:, 0] > -0.03) & (self.xyz[:, 0] < (self.W - 0.03))) & ((self.xyz[:, 1] > -0.02) & (self.xyz[:, 1] < (self.H-0.02))) & (self.xyz[:, 2] > self.z_min) & (self.xyz[:, 2] < 0.3))[0]
+        valid_idx = np.where(((self.xyz[:, 0] > -self.origin_to_corner_x) & (self.xyz[:, 0] < (self.W - self.origin_to_corner_x))) & ((self.xyz[:, 1] > -self.origin_to_corner_y) & (self.xyz[:, 1] < (self.H-self.origin_to_corner_y))) & (self.xyz[:, 2] > self.z_min) & (self.xyz[:, 2] < 0.3))[0]
 
         # self.pcd = self.select_by_index(self.pcd, valid_idx)
         self.pcd = self.pcd.select_by_index(valid_idx)
