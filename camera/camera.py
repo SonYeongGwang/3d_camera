@@ -204,6 +204,26 @@ class IntelCamera:
         cv2.imwrite("AruCo Marker.png", marker_generated) # Save image file
         cv2.waitKey() # Maintain until keyboard input
 
+    def create_charuco_marker(self):
+        # Define the dimensions of the Charuco board
+        num_squares_x = 5
+        num_squares_y = 7
+        square_length = 0.04  # meters
+        marker_length = 0.03  # meters
+
+        # Create the Charuco board
+        dictionary = cv2.aruco.Dictionary_get(cv2.aruco.DICT_4X4_250)
+        board = cv2.aruco.CharucoBoard_create(num_squares_x, num_squares_y, square_length, marker_length, dictionary)
+
+        # Generate a Charuco marker
+        board_img = board.draw((500, 600), 10, 30)
+
+        # Display the marker
+        cv2.imshow('Charuco Marker', board_img)
+        cv2.imwrite("Charuco Marker.png", board_img) # Save image file
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+
     def define_workspace(self):
         if self.saw_yaml != True:
             self.contents = 0
@@ -311,6 +331,7 @@ class KinectCamera(IntelCamera):
 
         return self.color_image, self.depth_image
 
+'''
 if __name__ == '__main__':
 
     # cam = IntelCamera(cfg=[])
@@ -354,3 +375,7 @@ if __name__ == '__main__':
         # vis.update_geometry(pcd)
         # vis.poll_events()
         # vis.update_renderer()
+'''
+if __name__ == '__main__':
+    cam = IntelCamera(cfg=[])
+    cam.create_charuco_marker()
