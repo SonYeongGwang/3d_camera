@@ -331,6 +331,7 @@ class KinectCamera(IntelCamera):
 
         return self.color_image, self.depth_image
 
+'''
 if __name__ == '__main__':
 
     # cam = IntelCamera(cfg=[])
@@ -374,3 +375,7 @@ if __name__ == '__main__':
         # vis.update_geometry(pcd)
         # vis.poll_events()
         # vis.update_renderer()
+'''
+if __name__ == '__main__':
+    cam = IntelCamera(cfg=[])
+    cam.create_charuco_marker()
