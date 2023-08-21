@@ -1,6 +1,6 @@
 ##############################################################
 #   camera.py
-#   version: 3.2.1 (edited in 2023.03.10)
+#   version: 3.2.2 (edited in 2023.08.21)
 ##############################################################
 import sys
 import os
@@ -63,7 +63,7 @@ class IntelCamera:
         else:
             self.intrinsic_o3d = o3d.camera.PinholeCameraIntrinsic(640, 480, self.fx, self.fy, self.ppx, self.ppy)
 
-        self.camera_mat = np.array([[self.fx, 0, self.ppx], [0, self.fy, self.ppy], [0, 0, 1]], dtype=np.float)
+        self.camera_mat = np.array([[self.fx, 0, self.ppx], [0, self.fy, self.ppy], [0, 0, 1]], dtype=np.float64)
 
         self.dist_coeffs = np.zeros(4)
         self.colorizer = rs.colorizer(color_scheme = 2)
@@ -184,7 +184,7 @@ class IntelCamera:
             aruco.refineDetectedMarkers(gray_img, self.board, corners, ids, rejected_points)
             _, charuco_corners, charuco_ids = aruco.interpolateCornersCharuco(corners, ids, gray_img, self.board, self.camera_mat, self.dist_coeffs)
             if len(corners) > 10:
-                _, rvec, tvec = aruco.estimatePoseCharucoBoard(charuco_corners, charuco_ids, self.board, self.camera_mat, self.dist_coeffs)
+                _, rvec, tvec = aruco.estimatePoseCharucoBoard(charuco_corners, charuco_ids, self.board, self.camera_mat, self.dist_coeffs, np.empty(1), np.empty(1))
                 R, _ = cv2.Rodrigues(rvec)
                 tvec = np.reshape(tvec, (3, 1))
                 self.cam2marker = np.concatenate((R, tvec), axis = 1)
@@ -294,7 +294,7 @@ class KinectCamera(IntelCamera):
         self.depth_scale = 0.001 # mm to m scale
 
         self.intrinsic_o3d = o3d.camera.PinholeCameraIntrinsic(1280, 720, self.fx, self.fy, self.ppx, self.ppy)
-        self.camera_mat = np.array([[self.fx, 0, self.ppx], [0, self.fy, self.ppy], [0, 0, 1]], dtype=np.float)
+        self.camera_mat = np.array([[self.fx, 0, self.ppx], [0, self.fy, self.ppy], [0, 0, 1]], dtype=np.float64)
         self.dist_coeffs = np.zeros(4)
 
         self.saw_yaml = False
@@ -331,7 +331,6 @@ class KinectCamera(IntelCamera):
 
         return self.color_image, self.depth_image
 
-'''
 if __name__ == '__main__':
 
     # cam = IntelCamera(cfg=[])
@@ -354,7 +353,7 @@ if __name__ == '__main__':
 
     while 1:
         rgb_img, depth_img = cam.stream()
-        cam.detectAruco()
+        # cam.detectAruco()
 
         # print(cam.cam2marker)
         # print(np.average(depth_img*0.00025))
@@ -375,7 +374,3 @@ if __name__ == '__main__':
         # vis.update_geometry(pcd)
         # vis.poll_events()
         # vis.update_renderer()
-'''
-if __name__ == '__main__':
-    cam = IntelCamera(cfg=[])
-    cam.create_charuco_marker()
